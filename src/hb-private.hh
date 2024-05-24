@@ -210,6 +210,10 @@ static int errno = 0; /* Use something better? */
 #  endif
 #endif
 
+#if defined(__ORBIS__) || defined(__PROSPERO__)
+#  define getenv(Name) nullptr
+#endif
+
 #if HAVE_ATEXIT
 /* atexit() is only safe to be called from shared libraries on certain
  * platforms.  Whitelist.
