@@ -40,6 +40,7 @@ endif ()
 
 
 ## HarfBuzz build configurations
+option(HB_BUILD_EXECUTABLES "Enable if executables should be built" OFF)
 option(HB_HAVE_FREETYPE "Enable freetype interop helpers" OFF)
 option(HB_HAVE_GRAPHITE2 "Enable Graphite2 complementary shaper" OFF)
 option(HB_BUILTIN_UCDN "Use HarfBuzz provided UCDN" ON)
@@ -871,16 +872,18 @@ install(
 )
 
 ## src/ executables
-foreach (prog main test test-would-substitute test-size-params test-buffer-serialize hb-ot-tag test-unicode-ranges)
-  set (prog_name ${prog})
-  if (${prog_name} STREQUAL "test")
-    # test can not be used as a valid executable name on cmake, lets special case it
-    set (prog_name test-test)
-  endif ()
-  add_executable(${prog_name} ${PROJECT_SOURCE_DIR}/src/${prog}.cc)
-  target_link_libraries(${prog_name} harfbuzz ${THIRD_PARTY_LIBS})
-endforeach ()
-set_target_properties(hb-ot-tag PROPERTIES COMPILE_FLAGS "-DMAIN")
+  if (HB_BUILD_EXECUTABLES)
+  foreach (prog main test test-would-substitute test-size-params test-buffer-serialize hb-ot-tag test-unicode-ranges)
+    set (prog_name ${prog})
+    if (${prog_name} STREQUAL "test")
+      # test can not be used as a valid executable name on cmake, lets special case it
+      set (prog_name test-test)
+    endif ()
+    add_executable(${prog_name} ${PROJECT_SOURCE_DIR}/src/${prog}.cc)
+    target_link_libraries(${prog_name} harfbuzz ${THIRD_PARTY_LIBS})
+  endforeach ()
+  set_target_properties(hb-ot-tag PROPERTIES COMPILE_FLAGS "-DMAIN")
+endif()
 
 ## Tests
 if (UNIX OR MINGW)
