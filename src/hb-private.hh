@@ -78,7 +78,7 @@ extern "C" void  hb_free_impl(void *ptr);
 /* Compiler attributes */
 
 
-#if __cplusplus < 201103L
+#if __cplusplus < 201103L && !defined(_MSC_VER)
 
 #ifndef nullptr
 #define nullptr NULL
