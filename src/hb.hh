@@ -429,6 +429,12 @@ extern "C" void  hb_free_impl(void *ptr);
 #  endif
 #endif
 
+#if defined(__ORBIS__) || defined(__PROSPERO__)
+#    ifndef HB_NO_GETENV
+#      define HB_NO_GETENV
+#    endif
+#endif
+
 #ifdef HB_NO_GETENV
 #define getenv(Name) nullptr
 #endif
