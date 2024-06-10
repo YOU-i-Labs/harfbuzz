@@ -29,35 +29,81 @@
 #ifndef HB_OT_HEAD_TABLE_HH
 #define HB_OT_HEAD_TABLE_HH
 
-#include "hb-open-type-private.hh"
+#include "hb-open-type.hh"
+
+/*
+ * head -- Font Header
+ * https://docs.microsoft.com/en-us/typography/opentype/spec/head
+ */
+#define HB_OT_TAG_head HB_TAG('h','e','a','d')
 
 
 namespace OT {
 
 
-/*
- * head -- Font Header
- */
-
-#define HB_OT_TAG_head HB_TAG('h','e','a','d')
-
 struct head
 {
-  friend struct OffsetTable;
+  friend struct OpenTypeOffsetTable;
 
-  static const hb_tag_t tableTag	= HB_OT_TAG_head;
+  static constexpr hb_tag_t tableTag = HB_OT_TAG_head;
 
-  inline unsigned int get_upem (void) const
+  unsigned int get_upem () const
   {
     unsigned int upem = unitsPerEm;
     /* If no valid head table found, assume 1000, which matches typical Type1 usage. */
     return 16 <= upem && upem <= 16384 ? upem : 1000;
   }
 
-  inline bool sanitize (hb_sanitize_context_t *c) const
+  bool serialize (hb_serialize_context_t *c) const
+  {
+    TRACE_SERIALIZE (this);
+    return_trace ((bool) c->embed (this));
+  }
+
+  bool subset (hb_subset_context_t *c) const
+  {
+    TRACE_SUBSET (this);
+    head *out = c->serializer->embed (this);
+    if (unlikely (!out)) return_trace (false);
+
+    if (c->plan->normalized_coords)
+    {
+      if (unlikely (!c->serializer->check_assign (out->xMin, c->plan->head_maxp_info.xMin,
+                                                  HB_SERIALIZE_ERROR_INT_OVERFLOW)))
+        return_trace (false);
+      if (unlikely (!c->serializer->check_assign (out->xMax, c->plan->head_maxp_info.xMax,
+                                                  HB_SERIALIZE_ERROR_INT_OVERFLOW)))
+        return_trace (false);
+      if (unlikely (!c->serializer->check_assign (out->yMin, c->plan->head_maxp_info.yMin,
+                                                  HB_SERIALIZE_ERROR_INT_OVERFLOW)))
+        return_trace (false);
+      if (unlikely (!c->serializer->check_assign (out->yMax, c->plan->head_maxp_info.yMax,
+                                                  HB_SERIALIZE_ERROR_INT_OVERFLOW)))
+        return_trace (false);
+    }
+    return_trace (true);
+  }
+
+  enum mac_style_flag_t {
+    BOLD	= 1u<<0,
+    ITALIC	= 1u<<1,
+    UNDERLINE	= 1u<<2,
+    OUTLINE	= 1u<<3,
+    SHADOW	= 1u<<4,
+    CONDENSED	= 1u<<5,
+    EXPANDED	= 1u<<6,
+  };
+
+  bool is_bold () const      { return macStyle & BOLD; }
+  bool is_italic () const    { return macStyle & ITALIC; }
+  bool is_condensed () const { return macStyle & CONDENSED; }
+  bool is_expanded () const  { return macStyle & EXPANDED; }
+
+  bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
     return_trace (c->check_struct (this) &&
+		  hb_barrier () &&
 		  version.major == 1 &&
 		  magicNumber == 0x5F0F3CF5u);
   }
@@ -70,6 +116,7 @@ struct head
 					 * entire font as HBUINT32, then store
 					 * 0xB1B0AFBAu - sum. */
   HBUINT32	magicNumber;		/* Set to 0x5F0F3CF5u. */
+  public:
   HBUINT16	flags;			/* Bit 0: Baseline for font at y=0;
 					 * Bit 1: Left sidebearing point at x=0;
 					 * Bit 2: Instructions may depend on point size;
@@ -114,6 +161,7 @@ struct head
 					 * encoded in the cmap subtables represent proper
 					 * support for those code points.
 					 * Bit 15: Reserved, set to 0. */
+  protected:
   HBUINT16	unitsPerEm;		/* Valid range is from 16 to 16384. This value
 					 * should be a power of 2 for fonts that have
 					 * TrueType outlines. */
@@ -121,10 +169,12 @@ struct head
 					   January 1, 1904. 64-bit integer */
   LONGDATETIME	modified;		/* Number of seconds since 12:00 midnight,
 					   January 1, 1904. 64-bit integer */
+  public:
   HBINT16	xMin;			/* For all glyph bounding boxes. */
   HBINT16	yMin;			/* For all glyph bounding boxes. */
   HBINT16	xMax;			/* For all glyph bounding boxes. */
   HBINT16	yMax;			/* For all glyph bounding boxes. */
+  protected:
   HBUINT16	macStyle;		/* Bit 0: Bold (if set to 1);
 					 * Bit 1: Italic (if set to 1)
 					 * Bit 2: Underline (if set to 1)
@@ -141,8 +191,8 @@ struct head
 					 * -1: Only strongly right to left;
 					 * -2: Like -1 but also contains neutrals. */
   public:
-  HBINT16	indexToLocFormat;	/* 0 for short offsets, 1 for long. */
-  HBINT16	glyphDataFormat;	/* 0 for current format. */
+  HBUINT16	indexToLocFormat;	/* 0 for short offsets, 1 for long. */
+  HBUINT16	glyphDataFormat;	/* 0 for current format. */
 
   DEFINE_SIZE_STATIC (54);
 };

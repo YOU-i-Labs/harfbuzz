@@ -55,9 +55,9 @@ hb_fc_get_glyph (hb_font_t *font /*HB_UNUSED*/,
     {
       unsigned int var_num = 0;
       if (variation_selector - 0xFE00u < 16)
-        var_num = variation_selector - 0xFE00 + 1;
+	var_num = variation_selector - 0xFE00 + 1;
       else if (variation_selector - 0xE0100u < (256 - 16))
-        var_num = variation_selector - 0xE0100 + 17;
+	var_num = variation_selector - 0xE0100 + 17;
       *glyph = (var_num << 21) | unicode;
     }
     else
@@ -72,13 +72,11 @@ hb_fc_get_glyph (hb_font_t *font /*HB_UNUSED*/,
 }
 
 static hb_font_funcs_t *
-_hb_fc_get_font_funcs (void)
+_hb_fc_get_font_funcs ()
 {
   static const hb_font_funcs_t *fc_ffuncs;
 
-  const hb_font_funcs_t *ffuncs;
-
-  if (!(ffuncs = fc_ffuncs))
+  if (!fc_ffuncs)
   {
     hb_font_funcs_t *newfuncs = hb_font_funcs_create ();
 
@@ -88,7 +86,7 @@ _hb_fc_get_font_funcs (void)
     if (fc_ffuncs)
       hb_font_funcs_destroy (newfuncs);
     else
-      fc_ffuncs = ffuncs = newfuncs;
+      fc_ffuncs = newfuncs;
   }
 
   return const_cast<hb_font_funcs_t *> (fc_ffuncs);

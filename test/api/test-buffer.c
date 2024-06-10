@@ -71,7 +71,7 @@ fixture_init (fixture_t *fixture, gconstpointer user_data)
 
     case BUFFER_ONE_BY_ONE:
       for (i = 1; i < G_N_ELEMENTS (utf32) - 1; i++)
-	hb_buffer_add (b, utf32[i], i);
+      hb_buffer_add (b, utf32[i], i);
       break;
 
     case BUFFER_UTF32:
@@ -92,14 +92,14 @@ fixture_init (fixture_t *fixture, gconstpointer user_data)
 }
 
 static void
-fixture_finish (fixture_t *fixture, gconstpointer user_data)
+fixture_finish (fixture_t *fixture, gconstpointer user_data HB_UNUSED)
 {
   hb_buffer_destroy (fixture->buffer);
 }
 
 
 static void
-test_buffer_properties (fixture_t *fixture, gconstpointer user_data)
+test_buffer_properties (fixture_t *fixture, gconstpointer user_data HB_UNUSED)
 {
   hb_buffer_t *b = fixture->buffer;
   hb_unicode_funcs_t *ufuncs;
@@ -208,7 +208,7 @@ test_buffer_contents (fixture_t *fixture, gconstpointer user_data)
       if (buffer_type == BUFFER_UTF16)
 	cluster++;
       else if (buffer_type == BUFFER_UTF8)
-        cluster += 3;
+	cluster += 3;
     }
     g_assert_cmphex (glyphs[i].codepoint, ==, utf32[1+i]);
     g_assert_cmphex (glyphs[i].cluster,   ==, cluster);
@@ -294,7 +294,7 @@ test_buffer_contents (fixture_t *fixture, gconstpointer user_data)
 }
 
 static void
-test_buffer_positions (fixture_t *fixture, gconstpointer user_data)
+test_buffer_positions (fixture_t *fixture, gconstpointer user_data HB_UNUSED)
 {
   hb_buffer_t *b = fixture->buffer;
   unsigned int i, len, len2;
@@ -319,7 +319,7 @@ test_buffer_positions (fixture_t *fixture, gconstpointer user_data)
 }
 
 static void
-test_buffer_allocation (fixture_t *fixture, gconstpointer user_data)
+test_buffer_allocation (fixture_t *fixture, gconstpointer user_data HB_UNUSED)
 {
   hb_buffer_t *b = fixture->buffer;
 
@@ -379,14 +379,15 @@ static void
 test_buffer_utf8_conversion (void)
 {
   hb_buffer_t *b;
-  hb_glyph_info_t *glyphs;
-  unsigned int bytes, chars, i, j, len;
+  unsigned int chars, i, j, len;
 
   b = hb_buffer_create ();
   hb_buffer_set_replacement_codepoint (b, (hb_codepoint_t) -1);
 
   for (i = 0; i < G_N_ELEMENTS (utf8_conversion_tests); i++)
   {
+    unsigned int bytes;
+    hb_glyph_info_t *glyphs;
     const utf8_conversion_test_t *test = &utf8_conversion_tests[i];
     char *escaped;
 
@@ -445,7 +446,7 @@ static const utf8_validity_test_t utf8_validity_tests[] = {
   { "\xe2\x89\xa0\xe2\x89\xa0",  5, 3, FALSE },
   { "\xe2\x89\xa0\xe2\x89\xa0",  6, 6, TRUE },
 
-  /* examples from http://www.cl.cam.ac.uk/~mgk25/ucs/examples/UTF-8-test.txt */
+  /* examples from https://www.cl.cam.ac.uk/~mgk25/ucs/examples/UTF-8-test.txt */
   /* greek 'kosme' */
   { "\xce\xba\xe1\xbd\xb9\xcf\x83\xce\xbc\xce\xb5", -1, 11, TRUE },
   /* first sequence of each length */
@@ -855,6 +856,74 @@ test_buffer_empty (void)
   g_assert (!hb_buffer_allocation_successful (b));
 }
 
+typedef struct {
+  const char *contents;
+  hb_buffer_serialize_format_t format;
+  unsigned int num_items;
+  hb_bool_t success;
+} serialization_test_t;
+
+static const serialization_test_t serialization_tests[] = {
+  { "<U+0640=0|U+0635=1>", HB_BUFFER_SERIALIZE_FORMAT_TEXT, 2, 1 },
+  { "[{\"u\":1600,\"cl\":0},{\"u\":1589,\"cl\":1}]", HB_BUFFER_SERIALIZE_FORMAT_JSON, 2, 1 },
+
+  /* Mixed glyphs/Unicodes -> parse fail */
+  { "[{\"u\":1600,\"cl\":0},{\"g\":1589,\"cl\":1}]", HB_BUFFER_SERIALIZE_FORMAT_JSON, 0, 0 },
+  { "<U+0640=0|uni0635=1>", HB_BUFFER_SERIALIZE_FORMAT_TEXT, 0, 0 },
+};
+
+static void
+test_buffer_serialize_deserialize (void)
+{
+  hb_buffer_t *b;
+  unsigned int i;
+
+  for (i = 0; i < G_N_ELEMENTS (serialization_tests); i++)
+  {
+    unsigned int consumed;
+    char round_trip[1024];
+
+    b = hb_buffer_create ();
+    hb_buffer_set_replacement_codepoint (b, (hb_codepoint_t) -1);
+
+    const serialization_test_t *test = &serialization_tests[i];
+    g_test_message ("serialize test #%d", i);
+
+    (void) hb_buffer_deserialize_unicode (b, test->contents, -1, NULL, test->format);
+
+    // Expected parse failure, got one, don't round-trip
+    if (test->success != 0)
+    {
+      unsigned int num_glyphs = hb_buffer_get_length (b);
+      g_assert_cmpint (num_glyphs, ==, test->num_items);
+
+      hb_buffer_serialize_unicode (b, 0, num_glyphs, round_trip,
+				   sizeof(round_trip), &consumed, test->format,
+				   HB_BUFFER_SERIALIZE_FLAG_DEFAULT);
+      g_assert_cmpstr (round_trip, ==, test->contents);
+    }
+
+    hb_buffer_destroy (b);
+
+  }
+
+  char test[1024];
+  unsigned int consumed;
+  hb_buffer_t *indeterminate = hb_buffer_get_empty ();
+  hb_buffer_serialize (indeterminate, 0, (unsigned) -1,
+		       test, sizeof(test), &consumed, NULL,
+		       HB_BUFFER_SERIALIZE_FORMAT_JSON,
+		       HB_BUFFER_SERIALIZE_FLAG_DEFAULT);
+  g_assert_cmpstr ( test, ==, "[]");
+
+  hb_buffer_serialize (indeterminate, 0, (unsigned) - 1,
+		       test, sizeof(test), &consumed, NULL,
+		       HB_BUFFER_SERIALIZE_FORMAT_TEXT,
+		       HB_BUFFER_SERIALIZE_FLAG_DEFAULT);
+  g_assert_cmpstr ( test, ==, "!!");
+
+}
+
 int
 main (int argc, char **argv)
 {
@@ -879,6 +948,7 @@ main (int argc, char **argv)
   hb_test_add (test_buffer_utf16_conversion);
   hb_test_add (test_buffer_utf32_conversion);
   hb_test_add (test_buffer_empty);
+  hb_test_add (test_buffer_serialize_deserialize);
 
   return hb_test_run();
 }

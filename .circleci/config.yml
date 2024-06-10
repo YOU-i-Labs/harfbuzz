@@ -1,190 +1,234 @@
-version: 2
+version: 2.1
+
+executors:
+  win32-executor:
+    docker:
+      - image: cimg/base:2023.10
+  win64-executor:
+    docker:
+      - image: cimg/base:2023.10
+  autotools-executor:
+    docker:
+      - image: cimg/base:2023.10
 
 jobs:
 
-  distcheck:
-    docker:
-      - image: ubuntu:17.10
+  macos-aat-fonts:
+    macos:
+      xcode: "12.5.1"
     steps:
       - checkout
-      - run: apt update && apt install -y ninja-build binutils libtool autoconf automake make cmake gcc g++ pkg-config ragel gtk-doc-tools libfreetype6-dev libglib2.0-dev libcairo2-dev libicu-dev libgraphite2-dev python python-pip
-      - run: pip install fonttools
-      - run: ./autogen.sh
-      - run: make
-      - run: make distcheck || .ci/fail.sh
-      - run: rm -rf harfbuzz-*
-      - run: make distdir && cd harfbuzz-* && cmake -DHB_CHECK=ON -Bbuild -H. -GNinja && ninja -Cbuild && CTEST_OUTPUT_ON_FAILURE=1 ninja -Cbuild test && ninja -Cbuild install
+      - run: HOMEBREW_NO_AUTO_UPDATE=1 brew install pkg-config ragel freetype glib cairo python3 icu4c graphite2 gobject-introspection ninja
+      - run: pip3 install meson --upgrade
+      - run: PKG_CONFIG_PATH="/usr/local/opt/icu4c/lib/pkgconfig:/usr/local/opt/libffi/lib/pkgconfig" meson setup build -Dcoretext=enabled -Dgraphite=enabled -Dauto_features=enabled -Dchafa=disabled -Ddocs=disabled
+      - run: meson compile -Cbuild
+      - run: meson test -Cbuild --print-errorlogs
+      - store_artifacts:
+          path: build/meson-logs/
 
-  alpine-O3:
+  # will be dropped with autotools removal
+  distcheck:
+    executor: autotools-executor
+    steps:
+      - checkout
+      - run: sudo apt update && DEBIAN_FRONTEND=noninteractive sudo apt install -y git ninja-build binutils libtool autoconf automake make gcc g++ pkg-config ragel gtk-doc-tools gobject-introspection libfreetype6-dev libglib2.0-dev libgirepository1.0-dev libcairo2-dev libicu-dev libgraphite2-dev python3 python3-pip
+      - run: pip3 install fonttools meson --upgrade
+      - run: ./autogen.sh
+      - run: make -j2 distcheck
+      - run: rm harfbuzz-* && make distdir
+      - run: cd harfbuzz-* && meson build && ninja -j2 -Cbuild test
+      - run: make dist
+      - persist_to_workspace:
+          root: .
+          paths: harfbuzz-*.tar.xz
+
+  publish-dist:
+    executor: autotools-executor
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run: |
+          .ci/publish_release_artifact.sh harfbuzz-$CIRCLE_TAG.tar.xz
+
+  fedora-valgrind:
+    docker:
+      - image: fedora:36
+    steps:
+      - checkout
+      - run: dnf install -y pkg-config ragel valgrind gcc gcc-c++ meson git glib2-devel freetype-devel cairo-devel libicu-devel gobject-introspection-devel graphite2-devel redhat-rpm-config python python-pip || true
+      - run: meson setup build --buildtype=debugoptimized
+      - run: meson compile -Cbuild -j9
+      # TOOD: increase timeouts and remove --no-suite=slow
+      - run: RUN_VALGRIND=1 meson test -Cbuild --no-suite=slow --wrap='valgrind --leak-check=full --error-exitcode=1' --print-errorlogs --num-processes=$(($(nproc)/2 + 1))
+
+  alpine:
     docker:
       - image: alpine
     steps:
       - checkout
-      - run: apk update && apk add ragel make pkgconfig libtool autoconf automake gettext gcc g++ glib-dev freetype-dev cairo-dev
-      # C??FLAGS are not needed for a regular build
-      - run: CFLAGS="-O3" CXXFLAGS="-O3" ./autogen.sh
-      - run: make
-      - run: make check || .ci/fail.sh
+      - run: apk update && apk add ragel gcc g++ glib-dev freetype-dev cairo-dev git py3-pip ninja
+      - run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip3 install meson==0.56.0
+          meson setup build --buildtype=minsize
+          meson compile -Cbuild -j9
+          meson test -Cbuild --print-errorlogs
 
-  archlinux-debug-O0:
+  asan-ubsan:
     docker:
-      - image: base/devel
+      - image: ubuntu
     steps:
       - checkout
-      - run: pacman --noconfirm -Syu freetype2 cairo icu gettext gobject-introspection gcc gcc-libs glib2 graphite pkg-config ragel python
-      # C??FLAGS are not needed for a regular build
-      - run: CFLAGS="-O0" CXXFLAGS="-O0" CPPFLAGS="-DHB_DEBUG" ./autogen.sh --with-freetype --with-glib --with-gobject --with-cairo --with-icu --with-graphite2
-      - run: make
-      - run: make check || .ci/fail.sh
+      - run: apt update || true
+      - run: DEBIAN_FRONTEND=noninteractive apt install -y python3 python3-pip python3-venv ninja-build clang lld git binutils pkg-config ragel libfreetype6-dev libglib2.0-dev libcairo2-dev libicu-dev libgraphite2-dev
+      - run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip3 install meson==0.56.0
+          CC=clang CXX=clang++ meson setup build --default-library=static -Db_sanitize=address,undefined --buildtype=debugoptimized --wrap-mode=nodownload -Dexperimental_api=true
+          meson compile -Cbuild -j9
+          meson test -Cbuild --print-errorlogs | asan_symbolize | c++filt
 
-  clang-O3-O0:
+  tsan:
     docker:
-      - image: multiarch/crossbuild
+      - image: ubuntu:20.04
     steps:
       - checkout
-      - run: apt update && apt install -y ragel libfreetype6-dev libglib2.0-dev libcairo2-dev libicu-dev libgraphite2-dev python python-pip
-      - run: pip install fonttools
-      - run: wget http://download.savannah.gnu.org/releases/freetype/freetype-2.9.tar.bz2 && tar xf freetype-2.9.tar.bz2 && cd freetype-2.9 && ./autogen.sh && ./configure && make -j4 && cd ..
-      - run: CFLAGS="-O3" CXXFLAGS="-O3" CC=clang CXX=clang++ ./autogen.sh --with-freetype --with-glib --with-cairo --with-icu --with-graphite2
-      - run: make
-      - run: LD_LIBRARY_PATH="$PWD/freetype-2.9/objs/.libs" make check || .ci/fail.sh
-      - run: CFLAGS="-O0" CXXFLAGS="-O0" CC=clang CXX=clang++ ./autogen.sh --with-freetype --with-glib --with-cairo --with-icu --with-graphite2
-      - run: make
-      - run: LD_LIBRARY_PATH="$PWD/freetype-2.9/objs/.libs" make check || .ci/fail.sh
+      - run: apt update || true
+      - run: DEBIAN_FRONTEND=noninteractive apt install -y python3 python3-pip python3-venv ninja-build clang lld git binutils pkg-config ragel libfreetype6-dev libglib2.0-dev libcairo2-dev libicu-dev libgraphite2-dev
+      - run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip3 install meson==0.56.0
+          CC=clang CXX=clang++ meson setup build --default-library=static -Db_sanitize=thread --buildtype=debugoptimized --wrap-mode=nodownload -Dexperimental_api=true
+          meson compile -Cbuild -j9
+          meson test -Cbuild --print-errorlogs | asan_symbolize | c++filt
 
-  fedora-outoftreebuild:
+  msan:
     docker:
-      - image: fedora
+      - image: ubuntu:20.04
     steps:
       - checkout
-      - run: dnf install -y pkg-config ragel gcc gcc-c++ automake autoconf libtool make which glib2-devel freetype-devel cairo-devel libicu-devel gobject-introspection-devel graphite2-devel redhat-rpm-config python || true
-      - run: NOCONFIGURE=1 ./autogen.sh --with-freetype --with-glib --with-gobject --with-cairo --with-icu --with-graphite2
-      - run: mkdir build && cd build && ../configure && make && (make check || ../.ci/fail.sh)
+      - run: apt update || true
+      - run: DEBIAN_FRONTEND=noninteractive apt install -y python3 python3-pip python3-venv ninja-build clang lld git binutils pkg-config ragel libfreetype6-dev libglib2.0-dev libcairo2-dev libicu-dev libgraphite2-dev
+      - run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip3 install meson==0.56.0
+          # msan, needs --force-fallback-for=glib,freetype2 also which doesn't work yet but runs fuzzer cases at least
+          CC=clang CXX=clang++ meson setup build --default-library=static -Db_sanitize=memory --buildtype=debugoptimized --wrap-mode=nodownload -Dauto_features=disabled -Dtests=enabled -Dexperimental_api=true
+          meson compile -Cbuild -j9
+          meson test -Cbuild --print-errorlogs | asan_symbolize | c++filt
 
-  cmake-gcc:
+  clang-cxx2a:
     docker:
-      - image: ubuntu:17.10
+      - image: ubuntu
     steps:
       - checkout
-      - run: apt update && apt install -y ninja-build binutils cmake gcc g++ pkg-config ragel gtk-doc-tools libfreetype6-dev libglib2.0-dev libcairo2-dev libicu-dev libgraphite2-dev python python-pip
-      - run: pip install fonttools
-      - run: cmake -DHB_CHECK=ON -Bbuild -H. -GNinja
-      - run: ninja -Cbuild
-      - run: CTEST_OUTPUT_ON_FAILURE=1 ninja -Cbuild test
-      - run: ninja -Cbuild install
+      - run: apt update || true
+      - run: DEBIAN_FRONTEND=noninteractive apt install -y clang lld git binutils
+      - run: clang -c src/harfbuzz-subset.cc -DHB_NO_MT -Werror -std=c++2a
 
-  cmake-oracledeveloperstudio:
-    docker:
-      - image: fedora
+  crossbuild-win32:
+    executor: win32-executor
     steps:
       - checkout
-      - run: dnf install -y gcc ragel cmake make which glib2-devel freetype-devel cairo-devel libicu-devel graphite2-devel wget tar bzip2 python || true
-      - run: wget http://$ODSUSER:$ODSPASS@behdad.org/harfbuzz-private/OracleDeveloperStudio12.6-linux-x86-bin.tar.bz2 && tar xf OracleDeveloperStudio12.6-linux-x86-bin.tar.bz2 --owner root --group root --no-same-owner
-      - run: CC=/root/project/OracleDeveloperStudio12.6-linux-x86-bin/developerstudio12.6/bin/suncc CXX=/root/project/OracleDeveloperStudio12.6-linux-x86-bin/developerstudio12.6/bin/sunCC cmake -DHB_HAVE_GRAPHITE2=ON -DHB_BUILTIN_UCDN=ON -DHB_HAVE_GLIB=ON -DHB_HAVE_ICU=ON -DHB_HAVE_FREETYPE=ON -Bbuild -H.
-      - run: make -Cbuild
-      - run: CTEST_OUTPUT_ON_FAILURE=1 make -Cbuild test
-      - run: make -Cbuild install
+      - run: sudo apt update && DEBIAN_FRONTEND=noninteractive sudo apt install -y ninja-build python3 python3-pip python3-venv git g++-mingw-w64-i686 zip
+      - run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip3 install meson==0.60.0
+          bash .ci/build-win32.sh
+      - store_artifacts:
+          path: harfbuzz-win32.zip
+      - persist_to_workspace:
+          root: .
+          paths: harfbuzz-win32.zip
 
-  crosscompile-notest-djgpp:
-    docker:
-      - image: quay.io/ebraminio/djgpp
+  publish-win32:
+    executor: win32-executor
     steps:
       - checkout
-      - run: apt update && apt install -y ragel pkg-config libtool autoconf
-      - run: CFLAGS="-Wno-attributes" CXXFLAGS="-Wno-attributes" ./autogen.sh --prefix=/usr/local/djgpp --host=i586-pc-msdosdjgpp
-      - run: make
+      - attach_workspace:
+          at: .
+      - run: |
+          mv harfbuzz-win32{,-$CIRCLE_TAG}.zip
+          .ci/publish_release_artifact.sh harfbuzz-win32-$CIRCLE_TAG.zip
 
-  crosscompile-notest-freebsd9:
-    docker:
-      - image: donbowman/freebsd-cross-build
+  crossbuild-win64:
+    executor: win64-executor
     steps:
       - checkout
-      - run: apt update && apt install -y pkg-config ragel
-      - run: ./autogen.sh --prefix=/freebsd --host=x86_64-pc-freebsd9
-      - run: make
+      - run: sudo apt update && DEBIAN_FRONTEND=noninteractive sudo apt install -y ninja-build python3 python3-pip python3-venv git g++-mingw-w64-x86-64 zip
+      - run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip3 install meson==0.60.0
+          bash .ci/build-win64.sh
+      - store_artifacts:
+          path: harfbuzz-win64.zip
+      - persist_to_workspace:
+          root: .
+          paths: harfbuzz-win64.zip
 
-  crosscompile-notest-psvita:
-    docker:
-      - image: dockcross/base
+  publish-win64:
+    executor: win64-executor
     steps:
       - checkout
-      - run: apt update && apt install ragel
-      - run: git clone https://github.com/vitasdk/vdpm && cd vdpm && ./bootstrap-vitasdk.sh
-      - run: ./autogen.sh --prefix=/usr/local/vitasdk/arm-vita-eabi --host=arm-vita-eabi
-      - run: make
+      - attach_workspace:
+          at: .
+      - run: |
+          mv harfbuzz-win64{,-$CIRCLE_TAG}.zip
+          .ci/publish_release_artifact.sh harfbuzz-win64-$CIRCLE_TAG.zip
 
-  crosscompile-cmake-notest-android-arm:
-    docker:
-      - image: dockcross/android-arm
-    steps:
-      - checkout
-      - run: apt update && apt install ragel
-      - run: cmake -Bbuild -H. -GNinja
-      - run: ninja -Cbuild
-
-  crosscompile-cmake-notest-browser-asmjs:
-    docker:
-      - image: dockcross/browser-asmjs
-    steps:
-      - checkout
-      - run: apt update && apt install ragel
-      - run: cmake -Bbuild -H. -GNinja
-      - run: ninja -Cbuild
-
-  crosscompile-cmake-notest-linux-arm64:
-    docker:
-      - image: dockcross/linux-arm64
-    steps:
-      - checkout
-      - run: apt update && apt install ragel
-      - run: cmake -Bbuild -H. -GNinja
-      - run: ninja -Cbuild
-
-  crosscompile-cmake-notest-linux-mips:
-    docker:
-      - image: dockcross/linux-mips
-    steps:
-      - checkout
-      - run: apt update && apt install ragel
-      - run: cmake -Bbuild -H. -GNinja
-      - run: ninja -Cbuild
-
-  crosscompile-cmake-notest-windows-x64:
-    docker:
-      - image: dockcross/windows-x64
-    steps:
-      - checkout
-      - run: apt update && apt install ragel
-      - run: cmake -Bbuild -H. -GNinja
-      - run: ninja -Cbuild
 
 workflows:
   version: 2
+
   build:
     jobs:
-      # both autotools and cmake
-      - distcheck
-
-      # autotools based builds
-      - alpine-O3
-      - archlinux-debug-O0
-      - clang-O3-O0
-      - fedora-outoftreebuild
-
-      # cmake based builds
-      - cmake-gcc
-      - cmake-oracledeveloperstudio
-
-      # crosscompiles
-      # they can't be test thus are without tests
-      ## autotools
-      - crosscompile-notest-djgpp
-      - crosscompile-notest-freebsd9
-      - crosscompile-notest-psvita
-
-      ## cmake
-      - crosscompile-cmake-notest-android-arm
-      - crosscompile-cmake-notest-browser-asmjs
-      - crosscompile-cmake-notest-linux-arm64
-      - crosscompile-cmake-notest-linux-mips
-      - crosscompile-cmake-notest-windows-x64
+      - macos-aat-fonts
+      - distcheck:
+          filters: # must have filter or won't work as a dependency
+            tags:
+              only: /.*/
+      - publish-dist:
+          requires:
+            - distcheck
+          filters:
+            tags:
+              only: /^\d+\.\d+\.\d+$/
+            branches:
+              ignore: /.*/
+      - fedora-valgrind
+      - alpine
+      - asan-ubsan
+      - tsan
+      - msan
+      - clang-cxx2a
+      - crossbuild-win32:
+          filters: # must have filter or won't work as a dependency
+            tags:
+              only: /.*/
+      - crossbuild-win64:
+          filters: # must have filter or won't work as a dependency
+            tags:
+              only: /.*/
+      - publish-win32:
+          requires:
+            - crossbuild-win32
+          filters:
+            tags:
+              only: /^\d+\.\d+\.\d+$/
+            branches:
+              ignore: /.*/
+      - publish-win64:
+          requires:
+            - crossbuild-win64
+          filters:
+            tags:
+              only: /^\d+\.\d+\.\d+$/
+            branches:
+              ignore: /.*/

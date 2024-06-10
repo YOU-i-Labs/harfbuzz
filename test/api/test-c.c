@@ -24,7 +24,7 @@
  * Google Author(s): Behdad Esfahbod
  */
 
-/* This file tests that all headers can be included from .c files */
+/* This file tests that all headers can be included from C files */
 
 
 #ifdef HAVE_CONFIG_H
@@ -32,6 +32,8 @@
 #endif
 
 #include <hb.h>
+#include <hb-ot.h>
+#include <hb-aat.h>
 
 #ifdef HAVE_GLIB
 #include <hb-glib.h>
@@ -45,10 +47,6 @@
 #include <hb-ft.h>
 #endif
 
-#ifdef HAVE_OT
-#include <hb-ot.h>
-#endif
-
 #ifdef HAVE_UNISCRIBE
 #include <hb-uniscribe.h>
 #endif
@@ -58,7 +56,7 @@
 #endif
 
 int
-main (int argc, char **argv)
+main (void)
 {
   return !*hb_shape_list_shapers ();
 }

@@ -9,10 +9,17 @@ MAINTAINERCLEANFILES =
 # Convenience targets:
 lib:
 	@$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/src lib
+libs:
+	@$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/src libs
 
-EXTRA_DIST += CMakeLists.txt
+EXTRA_DIST += meson.build
 
-EXTRA_DIST += fonts
+EXTRA_DIST += \
+	fonts \
+	results \
+	$(NULL)
+
+LINK = $(CXXLINK)
 
 if HAVE_GLIB
 AM_CPPFLAGS = -DSRCDIR="\"$(srcdir)\"" -I$(top_srcdir)/src/ -I$(top_builddir)/src/ $(GLIB_CFLAGS)
@@ -24,28 +31,94 @@ check_PROGRAMS = $(TEST_PROGS)
 noinst_PROGRAMS = $(TEST_PROGS)
 
 TEST_PROGS = \
+	test-aat-layout \
+	test-baseline \
+	test-base-minmax \
+	test-be-glyph-advance \
+	test-be-num-glyphs \
 	test-blob \
 	test-buffer \
+	test-c \
+	test-collect-unicodes \
+	test-cplusplus \
 	test-common \
+	test-draw \
+	test-extents \
 	test-font \
+	test-font-scale \
+	test-glyph-names \
+	test-instance-cff2 \
+	test-map \
 	test-object \
+	test-ot-alternates \
+	test-ot-color \
+	test-ot-collect-glyphs \
+	test-ot-face \
+	test-ot-glyphname \
+	test-ot-ligature-carets \
+	test-ot-layout \
+	test-ot-name \
+	test-ot-meta \
+	test-ot-metrics \
+	test-ot-tag \
+	test-ot-extents-cff \
+	test-ot-metrics-tt-var \
+	test-paint \
 	test-set \
 	test-shape \
+	test-style \
+	test-subset \
 	test-subset-cmap \
+	test-subset-drop-tables \
 	test-subset-glyf \
 	test-subset-hdmx \
 	test-subset-hmtx \
+	test-subset-nameids \
 	test-subset-os2 \
+	test-subset-post \
+	test-subset-vmtx \
+	test-subset-cff1 \
+	test-subset-cff2 \
+	test-subset-gvar \
+	test-subset-hvar \
+	test-subset-vvar \
+	test-subset-sbix \
+	test-subset-gpos \
+	test-subset-colr \
+	test-subset-cbdt \
+	test-subset-repacker \
 	test-unicode \
+	test-var-coords \
 	test-version \
 	$(NULL)
 
+test_draw_CPPFLAGS = $(AM_CPPFLAGS)
+test_draw_LDADD = $(LDADD)
+
+test_paint_CPPFLAGS = $(AM_CPPFLAGS)
+test_paint_LDADD = $(LDADD)
+
+test_instance_cff2_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
 test_subset_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
 test_subset_cmap_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_drop_tables_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
 test_subset_glyf_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
 test_subset_hdmx_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
 test_subset_hmtx_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
-test_subset_os2_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_os2_LDADD  = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_post_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_vmtx_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_cff1_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_cff2_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_gvar_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_hvar_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_vvar_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_sbix_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_cbdt_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_nameids_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_gpos_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_colr_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+test_subset_repacker_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
 
 test_unicode_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
@@ -57,29 +130,42 @@ test_unicode_CPPFLAGS += $(ICU_CFLAGS)
 test_unicode_LDADD += $(top_builddir)/src/libharfbuzz-icu.la $(ICU_LIBS)
 endif
 
-
-if HAVE_OT
-
-TEST_PROGS += \
-	test-ot-color \
-	test-ot-tag \
-	$(NULL)
+if HAVE_PTHREAD
+if HAVE_FREETYPE
+TEST_PROGS += test-multithread
+test_multithread_CFLAGS = $(CFLAGS) $(PTHREAD_CFLAGS) $(FREETYPE_CFLAGS)
+test_multithread_LDADD = $(LDADD) $(PTHREAD_LIBS) $(FREETYPE_LIBS)
+# The auto-generated link rule somehow includes CFLAGS as well.  Without
+# it, pthread link fails, because, who knows why, $PTHREAD_LIBS is empty.
+test_multithread_LINK = $(LINK) $(PTHREAD_CFLAGS)
+endif
+endif
 
 if HAVE_FREETYPE
+test_draw_CPPFLAGS += $(FREETYPE_CFLAGS)
+test_draw_LDADD += $(FREETYPE_LIBS)
+
+test_paint_CPPFLAGS += $(FREETYPE_CFLAGS)
+test_paint_LDADD += $(FREETYPE_LIBS)
+
 TEST_PROGS += \
 	test-ot-math \
+	test-ft \
 	$(NULL)
 test_ot_math_LDADD = $(LDADD) $(FREETYPE_LIBS)
 test_ot_math_CPPFLAGS = $(AM_CPPFLAGS) $(FREETYPE_CFLAGS)
+
+test_ft_LDADD = $(LDADD) $(FREETYPE_LIBS)
+test_ft_CPPFLAGS = $(AM_CPPFLAGS) $(FREETYPE_CFLAGS)
 endif # HAVE_FREETYPE
 
-endif # HAVE_OT
+if HAVE_CORETEXT
+TEST_PROGS += \
+	test-coretext \
+	$(NULL)
+endif # HAVE_CORETEXT
 
 # Tests for header compilation
-TEST_PROGS += \
-	test-c \
-	test-cplusplus \
-	$(NULL)
 test_cplusplus_SOURCES = test-cplusplus.cc
 test_c_CPPFLAGS = $(AM_CPPFLAGS)
 test_cplusplus_CPPFLAGS = $(AM_CPPFLAGS)
@@ -124,9 +210,9 @@ check-gtester:
 
 # Check tests under valgrind.  Saves log to log-valgrind.txt
 VALGRIND_FLAGS = \
-	--tool=memcheck --suppressions=$(srcdir)/.valgrind-suppressions \
+	--tool=memcheck \
 	--track-origins=yes \
-	--leak-check=yes
+	--leak-check=yes \
 	$(EXTRA_VALGRIND_FLAGS)
 #	Can't do for now: --show-reachable=yes
 CLEANFILES +=  log-valgrind.txt
@@ -145,13 +231,18 @@ symbols-tested.txt: $(TEST_PROGS)
 	$(AM_V_GEN)$(top_builddir)/libtool --mode=execute nm $^ \
 	| grep ' U hb_' | sed 's/.* U hb_/hb_/' \
 	| sort | uniq > $@.tmp && mv $@.tmp $@
+symbols-tested-or-deprecated.txt: symbols-tested.txt $(top_builddir)/src/harfbuzz-deprecated-symbols.txt
+	$(AM_V_GEN)cat $^ | sort | uniq > $@.tmp; mv $@.tmp $@
 symbols-exported.txt: $(top_builddir)/src/.libs/libharfbuzz.so
 	$(AM_V_GEN)$(top_builddir)/libtool --mode=execute nm $^ \
 	| grep ' T ' | sed 's/.* T //' | grep -v '^\(_init\|_fini\)$$' \
 	| sort | uniq > $@.tmp && mv $@.tmp $@
-symbols-untested.txt: symbols-tested.txt symbols-exported.txt
+symbols-untested.txt: symbols-tested-or-deprecated.txt symbols-exported.txt
 	$(AM_V_GEN)diff $^ > $@.tmp; mv $@.tmp $@
-CLEANFILES += symbols-tested.txt symbols-exported.txt symbols-untested.txt
+CLEANFILES += symbols-tested.txt \
+	symbols-exported.txt \
+	symbols-untested.txt \
+	symbols-tested-or-deprecated.txt
 check-symbols: symbols-untested.txt
 	@! cat $^ | grep .
 

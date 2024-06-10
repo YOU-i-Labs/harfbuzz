@@ -27,9 +27,7 @@
 #ifndef HB_TEST_H
 #define HB_TEST_H
 
-#ifdef HAVE_CONFIG_H
-#include <config.h>
-#endif
+#include <hb-config.hh>
 
 #include <hb-glib.h>
 
@@ -42,6 +40,7 @@ HB_BEGIN_DECLS
 /* Just in case */
 #undef G_DISABLE_ASSERT
 
+#define HB_UNUSED	G_GNUC_UNUSED
 
 /* Misc */
 
@@ -51,6 +50,17 @@ HB_BEGIN_DECLS
 				  ((const char *) s)[2], \
 				  ((const char *) s)[3]))
 
+#define HB_FACE_ADD_TABLE(face, tag, data) \
+	do { \
+	  hb_blob_t *blob = hb_blob_create_or_fail ((data), \
+						    sizeof (data), \
+						    HB_MEMORY_MODE_READONLY, \
+						    NULL, NULL); \
+	  hb_face_builder_add_table ((face), \
+				     HB_TAG_CHAR4(tag), \
+				     blob); \
+	  hb_blob_destroy (blob); \
+	} while (0)
 
 static inline const char *
 srcdir (void)
@@ -87,39 +97,6 @@ hb_test_run (void)
   return g_test_run ();
 }
 
-
-#if 0
-/* Helpers for loading test fonts */
-static inline hb_face_t *
-hb_test_load_face (const char *path)
-{
-  const char *font_data = NULL;
-  unsigned int len = 0;
-  hb_blob_t *blob = NULL;
-  hb_face_t *face = NULL;
-
-  FILE *f = fopen (path, "rb");
-  if (!f) {
-    perror (path);
-    exit (1);
-  }
-
-  fseek (f, 0, SEEK_END);
-  len = ftell (f);
-  fseek (f, 0, SEEK_SET);
-  font_data = (const char *) malloc (len);
-  if (!font_data) len = 0;
-  len = fread ((char *) font_data, 1, len, f);
-  fclose (f);
-
-  blob = hb_blob_create (font_data, len, HB_MEMORY_MODE_READONLY, 0, free);
-  face = hb_face_create (blob, 0 /* first face */);
-  hb_blob_destroy (blob);
-  return face;
-}
-#endif
-
-
 /* Bugzilla helpers */
 
 static inline void
@@ -136,25 +113,25 @@ hb_test_bug (const char *uri_base, unsigned int number)
 static inline void
 hb_test_bug_freedesktop (unsigned int number)
 {
-  hb_test_bug ("http://bugs.freedesktop.org/", number);
+  hb_test_bug ("https://bugs.freedesktop.org/", number);
 }
 
 static inline void
 hb_test_bug_gnome (unsigned int number)
 {
-  hb_test_bug ("http://bugzilla.gnome.org/", number);
+  hb_test_bug ("https://bugzilla.gnome.org/", number);
 }
 
 static inline void
 hb_test_bug_mozilla (unsigned int number)
 {
-  hb_test_bug ("http://bugzilla.mozilla.org/", number);
+  hb_test_bug ("https://bugzilla.mozilla.org/", number);
 }
 
 static inline void
 hb_test_bug_redhat (unsigned int number)
 {
-  hb_test_bug ("http://bugzilla.redhat.com/", number);
+  hb_test_bug ("https://bugzilla.redhat.com/", number);
 }
 
 
@@ -195,6 +172,12 @@ typedef void (*hb_test_fixture_func_t) (void);
 #ifndef g_assert_true
 #define g_assert_true g_assert
 #endif
+#ifndef g_assert_false
+#define g_assert_false(expr) g_assert(!(expr))
+#endif
+#ifndef g_assert_nonnull
+#define g_assert_nonnull  g_assert
+#endif
 #ifndef g_assert_cmpmem
 #define g_assert_cmpmem(m1, l1, m2, l2) g_assert_true (l1 == l2 && memcmp (m1, m2, l1) == 0)
 #endif
@@ -205,6 +188,16 @@ static inline void hb_test_assert_blobs_equal (hb_blob_t *expected_blob, hb_blob
   const char *raw_expected = hb_blob_get_data (expected_blob, &expected_length);
   const char *raw_actual = hb_blob_get_data (actual_blob, &actual_length);
   g_assert_cmpint(expected_length, ==, actual_length);
+  if (memcmp (raw_expected, raw_actual, expected_length) != 0)
+  {
+    for (unsigned int i = 0; i < expected_length; i++)
+    {
+      int expected = *(raw_expected + i);
+      int actual = *(raw_actual + i);
+      if (expected != actual) fprintf(stderr, "+%u %02x != %02x\n", i, expected, actual);
+      else fprintf(stderr, "+%u %02x\n", i, expected);
+    }
+  }
   g_assert_cmpint(0, ==, memcmp(raw_expected, raw_actual, expected_length));
 }
 
@@ -308,6 +301,28 @@ G_STMT_START { \
 	      G_PASTE (FixturePrefix, _init), Func, G_PASTE (FixturePrefix, _finish)); \
 } G_STMT_END
 
+
+static inline hb_face_t *
+hb_test_open_font_file (const char *font_path)
+{
+#if GLIB_CHECK_VERSION(2,37,2)
+  char *path = g_test_build_filename (G_TEST_DIST, font_path, NULL);
+#else
+  char *path = g_strdup (font_path);
+#endif
+
+  hb_blob_t *blob = hb_blob_create_from_file_or_fail (path);
+  hb_face_t *face;
+  if (!blob)
+    g_error ("Font %s not found.", path);
+
+  face = hb_face_create (blob, 0);
+  hb_blob_destroy (blob);
+
+  g_free (path);
+
+  return face;
+}
 
 HB_END_DECLS
 

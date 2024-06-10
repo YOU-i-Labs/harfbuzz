@@ -6,11 +6,15 @@ CLEANFILES =
 DISTCLEANFILES =
 MAINTAINERCLEANFILES =
 
+EXTRA_DIST += meson.build test-hb-subset-parsing.c
+
 include Makefile.sources
 
 # Convenience targets:
 lib:
 	@$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/src lib
+libs:
+	@$(MAKE) $(AM_MAKEFLAGS) -C $(top_builddir)/src libs
 
 bin_PROGRAMS =
 
@@ -21,6 +25,7 @@ AM_CPPFLAGS = \
 	$(GLIB_CFLAGS) \
 	$(FREETYPE_CFLAGS) \
 	$(CAIRO_FT_CFLAGS) \
+	$(CHAFA_CFLAGS) \
 	$(NULL)
 LDADD = \
 	$(top_builddir)/src/libharfbuzz.la \
@@ -31,33 +36,47 @@ LDADD = \
 
 if HAVE_GLIB
 
-if HAVE_FREETYPE
-if HAVE_CAIRO_FT
+if HAVE_CAIRO
 hb_view_SOURCES = $(HB_VIEW_sources)
 hb_view_LDADD = \
+	$(top_builddir)/src/libharfbuzz-cairo.la \
 	$(LDADD) \
 	$(CAIRO_LIBS) \
 	$(CAIRO_FT_LIBS) \
+	$(CHAFA_LIBS) \
 	$(NULL)
 bin_PROGRAMS += hb-view
-endif # HAVE_CAIRO_FT
-endif # HAVE_FREETYPE
+endif # HAVE_CAIRO
 
 hb_shape_SOURCES = $(HB_SHAPE_sources)
 bin_PROGRAMS += hb-shape
 
+hb_info_SOURCES = $(HB_INFO_sources)
+hb_info_LDADD = \
+	$(LDADD) \
+	$(NULL)
+if HAVE_GOBJECT
+hb_info_LDADD += \
+	$(top_builddir)/src/libharfbuzz-gobject.la \
+	$(GOBJECT_LIBS) \
+	$(NULL)
+endif # HAVE_GOBJECT
+if HAVE_CHAFA
+hb_info_LDADD += $(CHAFA_LIBS)
+endif # HAVE_CHAFA
+bin_PROGRAMS += hb-info
+
 hb_subset_SOURCES = $(HB_SUBSET_CLI_sources)
-hb_subset_LDADD = $(LDADD) $(top_builddir)/src/libharfbuzz-subset.la
+hb_subset_LDADD = \
+	$(top_builddir)/src/libharfbuzz-subset.la \
+	$(LDADD)
 bin_PROGRAMS += hb-subset
 
-if HAVE_OT
 hb_ot_shape_closure_SOURCES = $(HB_OT_SHAPE_CLOSURE_sources)
 bin_PROGRAMS += hb-ot-shape-closure
-endif # HAVE_OT
 
 endif # HAVE_GLIB
 
-#if HAVE_OT
 #if HAVE_FONTCONFIG
 #hb_fc_list_SOURCES = \
 #	hb-fc.cc \
@@ -70,6 +89,5 @@ endif # HAVE_GLIB
 #	$(NULL)
 #bin_PROGRAMS += hb-fc-list
 #endif # HAVE_FONTCONFIG
-#endif # HAVE_OT
 
 -include $(top_srcdir)/git.mk

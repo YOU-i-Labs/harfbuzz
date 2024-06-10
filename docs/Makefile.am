@@ -29,15 +29,12 @@ SCANGOBJ_OPTIONS=
 # Extra options to supply to gtkdoc-scan.
 # e.g. SCAN_OPTIONS=--deprecated-guards="GTK_DISABLE_DEPRECATED"
 SCAN_OPTIONS=--rebuild-types --deprecated-guards="HB_DISABLE_DEPRECATED" \
-	--ignore-decorators="HB_EXTERN"
+	--ignore-decorators='HB_EXTERN|HB_DEPRECATED|HB_DEPRECATED_FOR()'
 
 # Header files or dirs to ignore when scanning. Use base file/dir names
 # e.g. IGNORE_HFILES=gtkdebug.h gtkintl.h private_code
-IGNORE_HFILES=`cd $(top_srcdir)/src; find . -path './hb-*/*.h' | sed 's@^.*/@@'`
-if HAVE_GOBJECT
-else
+IGNORE_HFILES=`cd $(top_srcdir)/src; find . -path './*/*.h' | sed 's@^.*/@@'`
 IGNORE_HFILES+=hb-gobject.h hb-gobject-enums.h hb-gobject-structs.h
-endif
 
 # Extra options to supply to gtkdoc-mkdb.
 # e.g. MKDB_OPTIONS=--xml-mode --output-format=xml
@@ -62,7 +59,6 @@ CFILE_GLOB=$(top_srcdir)/src/hb-*.cc
 
 # Extra header to include when scanning, which are not under DOC_SOURCE_DIR
 # e.g. EXTRA_HFILES=$(top_srcdir}/contrib/extra.h
-EXTRA_HFILES=$(top_builddir)/src/hb-version.h
 
 # Images to copy into HTML directory.
 # e.g. HTML_IMAGES=$(top_srcdir)/gtk/stock-icons/stock_about_24.png
@@ -73,17 +69,21 @@ HTML_IMAGES=  \
 # Extra SGML files that are included by $(DOC_MAIN_SGML_FILE).
 # e.g. content_files=running.sgml building.sgml changes-2.0.sgml
 content_files=	\
-	usermanual-buffers-language-script-and-direction.xml \
-	usermanual-clusters.xml \
-	usermanual-fonts-and-faces.xml \
-	usermanual-glyph-information.xml \
-	usermanual-hello-harfbuzz.xml \
-	usermanual-install-harfbuzz.xml \
-	usermanual-opentype-features.xml \
 	usermanual-what-is-harfbuzz.xml \
+	usermanual-install-harfbuzz.xml \
+	usermanual-getting-started.xml \
+	usermanual-glyph-information.xml \
+	usermanual-shaping-concepts.xml \
+	usermanual-object-model.xml \
+	usermanual-buffers-language-script-and-direction.xml \
+	usermanual-fonts-and-faces.xml \
+	usermanual-opentype-features.xml \
+	usermanual-clusters.xml \
+	usermanual-utilities.xml \
+	usermanual-integration.xml \
 	version.xml
 
-# SGML files where gtk-doc abbrevations (#GtkWidget) are expanded
+# SGML files where gtk-doc abbreviations (#GtkWidget) are expanded
 # These files must be listed here *and* in content_files
 # e.g. expand_content_files=running.sgml
 expand_content_files=
@@ -104,7 +104,7 @@ include $(top_srcdir)/gtk-doc.make
 
 # Other files to distribute
 # e.g. EXTRA_DIST += version.xml.in
-EXTRA_DIST += version.xml.in
+EXTRA_DIST += version.xml.in meson.build
 
 # Files not to distribute
 # for --rebuild-types in $(SCAN_OPTIONS), e.g. $(DOC_MODULE).types

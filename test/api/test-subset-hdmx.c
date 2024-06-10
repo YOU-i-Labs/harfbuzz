@@ -24,8 +24,6 @@
  * Google Author(s): Garret Rieger
  */
 
-#include <stdbool.h>
-
 #include "hb-test.h"
 #include "hb-subset-test.h"
 
@@ -35,13 +33,14 @@
 static void
 test_subset_hdmx_simple_subset (void)
 {
-  hb_face_t *face_abc = hb_subset_test_open_font ("fonts/Roboto-Regular.abc.ttf");
-  hb_face_t *face_ac = hb_subset_test_open_font ("fonts/Roboto-Regular.ac.ttf");
+  hb_face_t *face_abc = hb_test_open_font_file ("fonts/Roboto-Regular.abc.ttf");
+  hb_face_t *face_ac = hb_test_open_font_file ("fonts/Roboto-Regular.ac.ttf");
 
   hb_set_t *codepoints = hb_set_create ();
+  hb_face_t *face_abc_subset;
   hb_set_add (codepoints, 'a');
   hb_set_add (codepoints, 'c');
-  hb_face_t *face_abc_subset = hb_subset_test_create_subset (face_abc, hb_subset_test_create_input (codepoints));
+  face_abc_subset = hb_subset_test_create_subset (face_abc, hb_subset_test_create_input (codepoints));
   hb_set_destroy (codepoints);
 
   hb_subset_test_check (face_ac, face_abc_subset, HB_TAG ('h','d','m','x'));
@@ -52,15 +51,56 @@ test_subset_hdmx_simple_subset (void)
 }
 
 static void
-test_subset_hdmx_noop (void)
+test_subset_hdmx_multiple_device_records (void)
 {
-  hb_face_t *face_abc = hb_subset_test_open_font("fonts/Roboto-Regular.abc.ttf");
+  hb_face_t *face_abc = hb_test_open_font_file ("fonts/Roboto-Regular.multihdmx.abc.ttf");
+  hb_face_t *face_a = hb_test_open_font_file ("fonts/Roboto-Regular.multihdmx.a.ttf");
 
-  hb_set_t *codepoints = hb_set_create();
+  hb_set_t *codepoints = hb_set_create ();
+  hb_face_t *face_abc_subset;
+  hb_set_add (codepoints, 'a');
+  face_abc_subset = hb_subset_test_create_subset (face_abc, hb_subset_test_create_input (codepoints));
+  hb_set_destroy (codepoints);
+
+  hb_subset_test_check (face_a, face_abc_subset, HB_TAG ('h','d','m','x'));
+
+  hb_face_destroy (face_abc_subset);
+  hb_face_destroy (face_abc);
+  hb_face_destroy (face_a);
+}
+
+static void
+test_subset_hdmx_invalid (void)
+{
+  hb_face_t *face = hb_test_open_font_file ("../fuzzing/fonts/crash-ccc61c92d589f895174cdef6ff2e3b20e9999a1a");
+
+  hb_subset_input_t *input = hb_subset_input_create_or_fail ();
+  hb_set_t *codepoints = hb_subset_input_unicode_set (input);
+  hb_face_t *subset;
+
   hb_set_add (codepoints, 'a');
   hb_set_add (codepoints, 'b');
   hb_set_add (codepoints, 'c');
-  hb_face_t *face_abc_subset = hb_subset_test_create_subset (face_abc, hb_subset_test_create_input (codepoints));
+
+  subset = hb_subset_or_fail (face, input);
+  g_assert (!subset);
+
+  hb_subset_input_destroy (input);
+  hb_face_destroy (subset);
+  hb_face_destroy (face);
+}
+
+static void
+test_subset_hdmx_noop (void)
+{
+  hb_face_t *face_abc = hb_test_open_font_file ("fonts/Roboto-Regular.abc.ttf");
+
+  hb_set_t *codepoints = hb_set_create();
+  hb_face_t *face_abc_subset;
+  hb_set_add (codepoints, 'a');
+  hb_set_add (codepoints, 'b');
+  hb_set_add (codepoints, 'c');
+  face_abc_subset = hb_subset_test_create_subset (face_abc, hb_subset_test_create_input (codepoints));
   hb_set_destroy (codepoints);
 
   hb_subset_test_check (face_abc, face_abc_subset, HB_TAG ('h','d','m','x'));
@@ -75,6 +115,8 @@ main (int argc, char **argv)
   hb_test_init (&argc, &argv);
 
   hb_test_add (test_subset_hdmx_simple_subset);
+  hb_test_add (test_subset_hdmx_multiple_device_records);
+  hb_test_add (test_subset_hdmx_invalid);
   hb_test_add (test_subset_hdmx_noop);
 
   return hb_test_run();

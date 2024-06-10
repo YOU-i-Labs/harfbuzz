@@ -32,71 +32,23 @@
 #include "hb-test.h"
 #include "hb-subset.h"
 
+#ifdef HAVE_STDBOOL_H
+# include <stdbool.h>
+#else
+typedef short bool;
+# ifndef true
+#  define true 1
+# endif
+# ifndef false
+#  define false 0
+# endif
+#endif
+
 
 HB_BEGIN_DECLS
 
-static inline char *
-hb_subset_test_read_file (const char *path,
-                          size_t     *length /* OUT */)
-{
-  FILE *fp = fopen (path, "rb");
-
-  long file_length = 0;
-  char *buffer = NULL;
-  if (fp && fseek (fp, 0, SEEK_END) == 0)
-  {
-    file_length = ftell(fp);
-    rewind (fp);
-  }
-
-  if (file_length > 0)
-  {
-    buffer = (char *) calloc (file_length + 1, sizeof (char));
-    if (buffer && fread (buffer, 1, file_length, fp) == (size_t) file_length)
-    {
-      *length = file_length;
-    }
-    else
-    {
-      free (buffer);
-      buffer = NULL;
-    }
-  }
-
-  if (fp)
-    fclose(fp);
-
-  return buffer;
-}
-
-static inline hb_face_t *
-hb_subset_test_open_font (const char *font_path)
-{
-#if GLIB_CHECK_VERSION(2,37,2)
-  gchar* path = g_test_build_filename(G_TEST_DIST, font_path, NULL);
-#else
-  gchar* path = g_strdup(fontFile);
-#endif
-
-  size_t length;
-  char *font_data = hb_subset_test_read_file(path, &length);
-
-  if (font_data != NULL) {
-    hb_blob_t *blob = hb_blob_create (font_data,
-                                      length,
-                                      HB_MEMORY_MODE_READONLY,
-                                      font_data,
-                                      free);
-    hb_face_t *face = hb_face_create (blob, 0);
-    hb_blob_destroy (blob);
-    return face;
-  }
-  g_assert (false);
-  return NULL; /* Shut up, compiler! */
-}
-
 static inline hb_subset_input_t *
-hb_subset_test_create_input(const hb_set_t  *codepoints)
+hb_subset_test_create_input (const hb_set_t *codepoints)
 {
   hb_subset_input_t *input = hb_subset_input_create_or_fail ();
   hb_set_t * input_codepoints = hb_subset_input_unicode_set (input);
@@ -104,28 +56,54 @@ hb_subset_test_create_input(const hb_set_t  *codepoints)
   return input;
 }
 
+static inline hb_subset_input_t *
+hb_subset_test_create_input_from_glyphs (const hb_set_t *glyphs)
+{
+  hb_subset_input_t *input = hb_subset_input_create_or_fail ();
+  hb_set_t * input_glyphs  = hb_subset_input_glyph_set (input);
+  hb_set_union (input_glyphs, glyphs);
+  return input;
+}
+
+static inline hb_subset_input_t *
+hb_subset_test_create_input_from_nameids (const hb_set_t *name_ids)
+{
+  hb_subset_input_t *input = hb_subset_input_create_or_fail ();
+  hb_set_t * input_name_ids  = hb_subset_input_set (input, HB_SUBSET_SETS_NAME_ID);
+  hb_set_set (input_name_ids, name_ids);
+
+  hb_set_t *name_langids = hb_subset_input_set (input, HB_SUBSET_SETS_NAME_LANG_ID);
+  hb_set_add_range (name_langids, 0, 0x5FFF);
+
+  hb_subset_input_set_flags (input,
+                             HB_SUBSET_FLAGS_NAME_LEGACY);
+  return input;
+}
+
 static inline hb_face_t *
 hb_subset_test_create_subset (hb_face_t *source,
-                              hb_subset_input_t *input)
+			      hb_subset_input_t *input)
 {
-  hb_subset_profile_t *profile = hb_subset_profile_create();
-  hb_face_t *subset = hb_subset (source, profile, input);
+  hb_face_t *subset = hb_subset_or_fail (source, input);
   g_assert (subset);
 
-  hb_subset_profile_destroy (profile);
   hb_subset_input_destroy (input);
   return subset;
 }
 
 static inline void
 hb_subset_test_check (hb_face_t *expected,
-                      hb_face_t *actual,
-                      hb_tag_t   table)
+		      hb_face_t *actual,
+		      hb_tag_t   table)
 {
-  fprintf(stderr, "compare %c%c%c%c\n", HB_UNTAG(table));
-  hb_blob_t *expected_blob = hb_face_reference_table (expected, table);
-  hb_blob_t *actual_blob = hb_face_reference_table (actual, table);
-  hb_test_assert_blobs_equal (expected_blob, actual_blob);
+  hb_blob_t *expected_blob, *actual_blob;
+  expected_blob = hb_face_reference_table (expected, table);
+  actual_blob = hb_face_reference_table (actual, table);
+  fprintf(stderr, "comparing %c%c%c%c, expected %d bytes, actual %d bytes\n", HB_UNTAG(table), hb_blob_get_length(expected_blob), hb_blob_get_length (actual_blob));
+
+  if (hb_blob_get_length (expected_blob) != 0 ||
+      hb_blob_get_length (actual_blob) != 0)
+    hb_test_assert_blobs_equal (expected_blob, actual_blob);
   hb_blob_destroy (expected_blob);
   hb_blob_destroy (actual_blob);
 }
