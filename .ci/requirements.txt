@@ -4,6 +4,10 @@
 #
 #    pip-compile --allow-unsafe --generate-hashes --output-file=.ci/requirements.txt .ci/requirements.in
 #
+colorlog==6.8.2 \
+    --hash=sha256:3e3e079a41feb5a1b64f978b5ea4f46040a94f11f0e8bbb8261e3dbbeca64d44 \
+    --hash=sha256:4dcbb62368e2800cb3c5abd348da7e53f6c362dda502ec27c560b2e58a66bd33
+    # via gcovr
 fonttools==4.51.0 \
     --hash=sha256:0118ef998a0699a96c7b28457f15546815015a2710a1b23a7bf6c1be60c01636 \
     --hash=sha256:0d145976194a5242fdd22df18a1b451481a88071feadf251221af110ca8f00ce \
@@ -48,9 +52,9 @@ fonttools==4.51.0 \
     --hash=sha256:ee1af4be1c5afe4c96ca23badd368d8dc75f611887fb0c0dac9f71ee5d6f110e \
     --hash=sha256:f7e89853d8bea103c8e3514b9f9dc86b5b4120afb4583b57eb10dfa5afbe0936
     # via -r requirements-fonttools.in
-gcovr==5.0 \
-    --hash=sha256:1d80264cbaadff356b3dda71b8c62b3aa803e5b3eb6d526a24932cd6660a2576 \
-    --hash=sha256:8c49ebcfc5a98b56dd900c687aad0258ac86093d2f81a1417905193ab45fe69f
+gcovr==8.2 \
+    --hash=sha256:9a1dddd4585d13ec77555db5d6b6a31ee81587ea6fc604ff9fcd232cb0782df5 \
+    --hash=sha256:bee23da2198bc1e0b9d0109018b9460df52355372319b5ddf81aca4e54f6bd61
     # via -r requirements.in
 jinja2==3.1.4 \
     --hash=sha256:4a3aee7acbbe7303aede8e9648d13b8bf88a429282aa6122a993f0ac800cb369 \
@@ -236,6 +240,10 @@ ninja==1.11.1.1 \
 pygments==2.16.1 \
     --hash=sha256:13fc09fa63bc8d8671a6d247e1eb303c4b343eaee81d861f3404db2935653692 \
     --hash=sha256:1daff0494820c69bc8941e407aa20f577374ee88364ee10a98fdbe0aece96e29
+    # via gcovr
+tomli==2.0.2 \
+    --hash=sha256:2ebe24485c53d303f690b0ec092806a085f07af5a5aa1464f3931eec36caaa38 \
+    --hash=sha256:d46d457a85337051c36524bc5349dd91b1877838e2979ac5ced3e710ed8a60ed
     # via gcovr
 
 # The following packages are considered to be unsafe in a requirements file:
